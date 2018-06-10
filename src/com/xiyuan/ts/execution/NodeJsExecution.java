@@ -1,0 +1,149 @@
+package com.xiyuan.ts.execution;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.intellij.execution.ProgramRunnerUtil;
+import com.intellij.execution.RunManager;
+import com.intellij.execution.configurations.RunConfiguration;
+import com.intellij.execution.executors.DefaultDebugExecutor;
+import com.intellij.execution.executors.DefaultRunExecutor;
+import com.intellij.execution.impl.RunnerAndConfigurationSettingsImpl;
+import com.intellij.lang.typescript.compiler.TypeScriptCompilerSettings;
+import com.intellij.lang.typescript.compiler.action.before.TypeScriptCompileBeforeRunTaskProvider;
+import com.intellij.lang.typescript.tsconfig.TypeScriptConfig;
+import com.intellij.lang.typescript.tsconfig.TypeScriptConfigService;
+import com.intellij.lang.typescript.tsconfig.TypeScriptConfigUtil;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.jetbrains.nodejs.run.NodeJsRunConfiguration;
+import com.jetbrains.nodejs.run.NodeJsRunConfigurationState;
+import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
+
+import java.io.File;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Created by xiyuan_fengyu on 2018/6/10 9:32.
+ */
+public class NodeJsExecution {
+
+    private static final String TypeScriptFileType = "com.intellij.lang.javascript.TypeScriptFileType";
+
+    private static final String tsconfig_json = "tsconfig.json";
+
+    private static final JsonParser jsonParser = new JsonParser();
+
+    private static final Map<String, RunnerAndConfigurationSettingsImpl> configurations = new HashMap<>();
+
+    private static final Method getOptions;
+
+    private static final TypeScriptCompileBeforeRunTaskProvider provider = new TypeScriptCompileBeforeRunTaskProvider();
+
+    static {
+        Method temp = null;
+        try {
+            temp = NodeJsRunConfiguration.class.getDeclaredMethod("getOptions");
+            temp.setAccessible(true);
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        }
+        getOptions = temp;
+    }
+
+    public static void resetTsCompilerSettings(Project project) {
+        try {
+            Collection<TypeScriptConfig> configFiles = TypeScriptConfigService.Provider.getConfigFiles(project);
+            if (!configFiles.isEmpty()) {
+                TypeScriptCompilerSettings settings = TypeScriptCompilerSettings.getSettings(project);
+                settings.setRecompileOnChanges(true);
+                settings.setUseConfig(true);
+                settings.setUseService(true);
+            }
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void execute(Project project, VirtualFile virtualFile, boolean debug) {
+        RunManager runManager = RunManager.getInstance(project);
+        RunnerAndConfigurationSettingsImpl configuration = getConfiguration(project, virtualFile);
+        if (configuration != null) {
+            List<RunConfiguration> configurationsList = runManager.getConfigurationsList(NodeJsRunConfigurationType.getInstance());
+            if (!configurationsList.contains(configuration.getConfiguration())) {
+                runManager.addConfiguration(configuration);
+            }
+            if (runManager.getSelectedConfiguration() != configuration) {
+                runManager.setSelectedConfiguration(configuration);
+            }
+            ProgramRunnerUtil.executeConfiguration(configuration,
+                    debug ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance());
+        }
+    }
+
+    public static boolean executable(Project project, VirtualFile virtualFile) {
+        return TypeScriptFileType.equals(virtualFile.getFileType().getClass().getName())
+                && getConfiguration(project, virtualFile) != null;
+    }
+
+    private static RunnerAndConfigurationSettingsImpl getConfiguration(Project project, VirtualFile virtualFile) {
+        String tsPath = virtualFile.getCanonicalPath();
+        RunnerAndConfigurationSettingsImpl configuration = configurations.get(tsPath);
+        if (configuration == null) {
+            if (tsPath == null) return null;
+
+            try {
+                TypeScriptConfig tsconfig = TypeScriptConfigUtil.getConfigForFile(project, virtualFile);
+                if (tsconfig != null) {
+                    String tscofigStr = new String(tsconfig.getConfigFile().contentsToByteArray(), StandardCharsets.UTF_8);
+                    JsonObject tsconfigJson = jsonParser.parse(tscofigStr).getAsJsonObject();
+                    JsonObject compilerOptions = tsconfigJson.getAsJsonObject("compilerOptions");
+
+                    String tsconfigDir = tsconfig.getConfigDirectory().getCanonicalPath();
+                    String rootDir = compilerOptions.get("rootDir").getAsString();
+                    String outDir = compilerOptions.get("outDir").getAsString();
+                    rootDir = getPath(tsconfigDir, rootDir);
+                    outDir = getPath(tsconfigDir, outDir);
+
+                    if (tsPath.replaceAll("\\\\", "/")
+                            .indexOf((rootDir + File.separator).replaceAll("\\\\", "/")) == 0) {
+                        String relatedTsPath = tsPath.substring(rootDir.length() + 1).replace(".ts", ".js");
+                        File complieJs = new File(outDir + File.separator + relatedTsPath);
+                        if (complieJs.exists()) {
+                            String complieJsName = complieJs.getName();
+                            RunManager runManager = RunManager.getInstance(project);
+                            configuration = (RunnerAndConfigurationSettingsImpl) runManager.createConfiguration(virtualFile.getName(),
+                                            NodeJsRunConfigurationType.getInstance().getFactory());
+                            RunConfiguration con = configuration.getConfiguration();
+                            NodeJsRunConfigurationState state = (NodeJsRunConfigurationState) getOptions.invoke(con);
+                            state.setWorkingDir(complieJs.getParent());
+                            state.setPathToJsFile(complieJsName);
+                            runManager.addConfiguration(configuration);
+                            configurations.put(tsPath, configuration);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return configuration;
+    }
+
+    private static String getPath(String curDirPath, String path) {
+        if (path.startsWith("/")) return path;
+        try {
+            return new File(curDirPath + "/" + path).getCanonicalPath();
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+        return path;
+    }
+
+}

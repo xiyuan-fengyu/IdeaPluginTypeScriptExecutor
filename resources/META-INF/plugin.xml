@@ -1,0 +1,58 @@
+<idea-plugin>
+    <id>com.xiyuan</id>
+    <name>TypeScriptExecutor</name>
+    <version>1.0</version>
+    <vendor email="xiyuan_fengyu@163.com" url="https://github.com/xiyuan-fengyu">xiyuan_fengyu</vendor>
+
+    <depends>NodeJS</depends>
+    <depends>JavaScript</depends>
+
+    <description><![CDATA[
+    1.install NodeJS plugin first
+    2. New -> New tsconfig.json (ignore this step if existed)
+    3. ContextMenu on typescript file to Run / Debug
+    ]]></description>
+
+    <change-notes><![CDATA[
+
+    2018-06-10  v0.0.1
+    ]]>
+    </change-notes>
+
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
+    <idea-version since-build="173.0"/>
+
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
+         on how to target different products -->
+    <!-- uncomment to enable plugin in all products
+    <depends>com.intellij.modules.lang</depends>
+    -->
+
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Add your extensions here -->
+        <postStartupActivity
+                implementation="com.xiyuan.ts.activity.TsExecutorActivity"/>
+    </extensions>
+
+    <actions>
+        <action id="com.xiyuan.ts.action.NewTsconfigAction" class="com.xiyuan.ts.action.NewTsconfigAction"
+                icon="Icons.Json"
+                text="new tsconfig.json" description="new deault tsconfig.json">
+            <add-to-group group-id="NewGroup" anchor="after" relative-to-action="NewTypeScriptFile"/>
+        </action>
+        <action id="com.xiyuan.ts.action.RunAction" class="com.xiyuan.ts.action.RunAction"
+                icon="Icons.Run"
+                text="Run" description="run ts">
+            <add-to-group group-id="ProjectViewPopupMenuRunGroup" anchor="first"/>
+            <add-to-group group-id="EditorPopupMenu.Run" anchor="first"/>
+        </action>
+        <action id="com.xiyuan.ts.action.DebugAction" class="com.xiyuan.ts.action.DebugAction"
+                icon="Icons.Debug"
+                text="Debug" description="debug ts">
+            <add-to-group group-id="ProjectViewPopupMenuRunGroup" anchor="after" relative-to-action="com.xiyuan.ts.action.RunAction"/>
+            <add-to-group group-id="EditorPopupMenu.Run" anchor="after" relative-to-action="com.xiyuan.ts.action.RunAction"/>
+        </action>
+    </actions>
+
+</idea-plugin>
