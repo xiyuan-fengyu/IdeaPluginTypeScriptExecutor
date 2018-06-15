@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.xiyuan</id>
     <name>TypeScriptExecutor</name>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <vendor email="xiyuan_fengyu@163.com" url="https://github.com/xiyuan-fengyu">xiyuan_fengyu</vendor>
 
     <depends>NodeJS</depends>
