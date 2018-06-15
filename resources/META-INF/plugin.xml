@@ -1,5 +1,5 @@
 <idea-plugin>
-    <id>com.xiyuan</id>
+    <id>com.xiyuan.TypeScriptExecutor</id>
     <name>TypeScriptExecutor</name>
     <version>1.0.2</version>
     <vendor email="xiyuan_fengyu@163.com" url="https://github.com/xiyuan-fengyu">xiyuan_fengyu</vendor>
