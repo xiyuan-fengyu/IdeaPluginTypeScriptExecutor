@@ -8,17 +8,18 @@
     <depends>JavaScript</depends>
 
     <description><![CDATA[
-    1.install NodeJS plugin first
-    2. New -> New tsconfig.json (ignore this step if existed)
-    3. ContextMenu on typescript file to Run / Debug
+    <p>1.install NodeJS plugin first</p>
+    <p>2. New -> New tsconfig.json (ignore this step if existed)</p>
+    <p>3. ContextMenu on typescript file to Run / Debug</p>
     ]]></description>
 
     <change-notes><![CDATA[
-    <h1>2018-06-15 v1.0.1</h1>
+    <h1>2018-06-15 v1.0.2</h1>
     <p>If existing a tsconfig.json under project root, auto compile ts files after project loaded.</p>
     <p>Auto compile ts files after clicking "New tsconfig.json".</p>
+    <br>
 
-    <h1>2018-06-10  v1.0</h1>
+    <h1>2018-06-10  v1.0.1</h1>
     ]]>
     </change-notes>
 
