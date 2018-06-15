@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.xiyuan</id>
     <name>TypeScriptExecutor</name>
-    <version>1.0</version>
+    <version>1.0.1</version>
     <vendor email="xiyuan_fengyu@163.com" url="https://github.com/xiyuan-fengyu">xiyuan_fengyu</vendor>
 
     <depends>NodeJS</depends>
@@ -14,8 +14,11 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h1>2018-06-15 v1.0.1</h1>
+    <p>If existing a tsconfig.json under project root, auto compile ts files after project loaded.</p>
+    <p>Auto compile ts files after clicking "New tsconfig.json".</p>
 
-    2018-06-10  v0.0.1
+    <h1>2018-06-10  v1.0</h1>
     ]]>
     </change-notes>
 

@@ -8,13 +8,18 @@ import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.executors.DefaultRunExecutor;
 import com.intellij.execution.impl.RunnerAndConfigurationSettingsImpl;
+import com.intellij.lang.javascript.service.JSLanguageServiceResultContainer;
+import com.intellij.lang.typescript.compiler.TypeScriptCompilerService;
 import com.intellij.lang.typescript.compiler.TypeScriptCompilerSettings;
 import com.intellij.lang.typescript.compiler.action.before.TypeScriptCompileBeforeRunTaskProvider;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfig;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigService;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigUtil;
+import com.intellij.openapi.application.Application;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
 import com.jetbrains.nodejs.run.NodeJsRunConfiguration;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationState;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
@@ -22,10 +27,9 @@ import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /**
  * Created by xiyuan_fengyu on 2018/6/10 9:32.
@@ -57,12 +61,21 @@ public class NodeJsExecution {
 
     public static void resetTsCompilerSettings(Project project) {
         try {
-            Collection<TypeScriptConfig> configFiles = TypeScriptConfigService.Provider.getConfigFiles(project);
-            if (!configFiles.isEmpty()) {
+            Iterator<TypeScriptConfig> it = TypeScriptConfigService.Provider.getConfigFiles(project).iterator();
+            if (it.hasNext()) {
                 TypeScriptCompilerSettings settings = TypeScriptCompilerSettings.getSettings(project);
                 settings.setRecompileOnChanges(true);
                 settings.setUseConfig(true);
                 settings.setUseService(true);
+                Future<JSLanguageServiceResultContainer> future = TypeScriptCompilerService.getDefaultService(project).compileConfigProjectAndGetErrors(it.next());
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    try {
+                        future.get();
+                        VirtualFileManager.getInstance().syncRefresh();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
             }
         }
         catch (Exception e) {
