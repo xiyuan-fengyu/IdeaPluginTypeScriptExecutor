@@ -15,8 +15,8 @@ import com.intellij.lang.typescript.compiler.action.before.TypeScriptCompileBefo
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfig;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigService;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigUtil;
-import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -27,8 +27,10 @@ import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 /**
@@ -47,6 +49,8 @@ public class NodeJsExecution {
     private static final Method getOptions;
 
     private static final TypeScriptCompileBeforeRunTaskProvider provider = new TypeScriptCompileBeforeRunTaskProvider();
+
+    private static final Logger logger = Logger.getInstance(NodeJsExecution.class.toString());
 
     static {
         Method temp = null;
@@ -107,42 +111,70 @@ public class NodeJsExecution {
     private static RunnerAndConfigurationSettingsImpl getConfiguration(Project project, VirtualFile virtualFile) {
         String tsPath = virtualFile.getCanonicalPath();
         RunnerAndConfigurationSettingsImpl configuration = configurations.get(tsPath);
+
         if (configuration == null) {
             if (tsPath == null) return null;
 
+            File complieJs = null;
+            TypeScriptConfig tsconfig = null;
+
+            String rootDir = null;
+            String outDir = null;
+
             try {
-                TypeScriptConfig tsconfig = TypeScriptConfigUtil.getConfigForFile(project, virtualFile);
+                tsconfig = TypeScriptConfigUtil.getConfigForFile(project, virtualFile);
                 if (tsconfig != null) {
                     String tscofigStr = new String(tsconfig.getConfigFile().contentsToByteArray(), StandardCharsets.UTF_8);
                     JsonObject tsconfigJson = jsonParser.parse(tscofigStr).getAsJsonObject();
                     JsonObject compilerOptions = tsconfigJson.getAsJsonObject("compilerOptions");
 
                     String tsconfigDir = tsconfig.getConfigDirectory().getCanonicalPath();
-                    String rootDir = compilerOptions.get("rootDir").getAsString();
-                    String outDir = compilerOptions.get("outDir").getAsString();
+
+                    rootDir = compilerOptions.get("rootDir").getAsString();
+                    outDir = compilerOptions.get("outDir").getAsString();
+
                     rootDir = getPath(tsconfigDir, rootDir);
                     outDir = getPath(tsconfigDir, outDir);
 
-                    if (tsPath.replaceAll("\\\\", "/")
+                    if ((rootDir.equals(outDir)) || tsPath.replaceAll("\\\\", "/")
                             .indexOf((rootDir + File.separator).replaceAll("\\\\", "/")) == 0) {
-                        String relatedTsPath = tsPath.substring(rootDir.length() + 1).replace(".ts", ".js");
-                        File complieJs = new File(outDir + File.separator + relatedTsPath);
-                        if (complieJs.exists()) {
-                            String complieJsName = complieJs.getName();
-                            RunManager runManager = RunManager.getInstance(project);
-                            configuration = (RunnerAndConfigurationSettingsImpl) runManager.createConfiguration(virtualFile.getName(),
-                                            NodeJsRunConfigurationType.getInstance().getFactory());
-                            RunConfiguration con = configuration.getConfiguration();
-                            NodeJsRunConfigurationState state = (NodeJsRunConfigurationState) getOptions.invoke(con);
-                            state.setWorkingDir(complieJs.getParent());
-                            state.setPathToJsFile(complieJsName);
-                            runManager.addConfiguration(configuration);
-                            configurations.put(tsPath, configuration);
+                        if (!rootDir.equals(outDir)) {
+                            String relatedTsPath = tsPath
+                                    .substring(rootDir.length() + 1)
+                                    .replaceAll("\\.ts$", ".js");
+
+                            complieJs = new File(outDir + File.separator + relatedTsPath);
+                        } else {
+                            complieJs = new File(tsPath.replaceAll("\\.ts$", ".js"));
                         }
                     }
                 }
             } catch (Exception e) {
                 e.printStackTrace();
+                //logger.error(e);
+
+                if (rootDir == null && outDir == null || rootDir == outDir)
+                {
+                    complieJs = new File(tsPath.replaceAll("\\.ts$", ".js"));
+                }
+            }
+
+            try {
+                if (complieJs != null && complieJs.exists()) {
+                    String complieJsName = complieJs.getName();
+                    RunManager runManager = RunManager.getInstance(project);
+                    configuration = (RunnerAndConfigurationSettingsImpl) runManager.createConfiguration(virtualFile.getName(),
+                            NodeJsRunConfigurationType.getInstance().getFactory());
+                    RunConfiguration con = configuration.getConfiguration();
+                    NodeJsRunConfigurationState state = (NodeJsRunConfigurationState) getOptions.invoke(con);
+                    state.setWorkingDir(complieJs.getParent());
+                    state.setPathToJsFile(complieJsName);
+                    runManager.addConfiguration(configuration);
+                    configurations.put(tsPath, configuration);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                //logger.error(e);
             }
         }
         return configuration;
