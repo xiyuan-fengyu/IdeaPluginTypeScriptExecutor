@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.xiyuan.TypeScriptExecutor</id>
     <name>TypeScriptExecutor</name>
-    <version>1.0.2</version>
+    <version>1.0.3</version>
     <vendor email="xiyuan_fengyu@163.com" url="https://github.com/xiyuan-fengyu">xiyuan_fengyu</vendor>
 
     <depends>NodeJS</depends>
@@ -14,6 +14,11 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h1>2018-06-18 v1.0.3</h1>
+    <p>fix bug: fial to auto compile after ts file change.</p>
+    <p>make it supported when the tsconfig.json file or rootDir/outDir property is not existed.</p>
+    <br>
+
     <h1>2018-06-15 v1.0.2</h1>
     <p>If existing a tsconfig.json under project root, auto compile ts files after project loaded.</p>
     <p>Auto compile ts files after clicking "New tsconfig.json".</p>

@@ -15,17 +15,14 @@ public class DebugAction extends AnAction {
 
     @Override
     public void actionPerformed(AnActionEvent event) {
-        Project project = event.getProject();
-        VirtualFile virtualFile = event.getData(DataKeys.VIRTUAL_FILE);
-        if (project == null || virtualFile == null) return;
-        NodeJsExecution.execute(project, virtualFile, true);
+        NodeJsExecution.execute(event, true);
     }
 
     @Override
     public void update(AnActionEvent event) {
         Project project = event.getProject();
         VirtualFile virtualFile = event.getData(DataKeys.VIRTUAL_FILE);
-        if (project != null && virtualFile != null && NodeJsExecution.executable(project, virtualFile)) {
+        if (project != null && virtualFile != null && NodeJsExecution.executable(virtualFile)) {
             event.getPresentation().setEnabledAndVisible(true);
             event.getPresentation().setText("Debug '" + virtualFile.getName() + "'");
         }

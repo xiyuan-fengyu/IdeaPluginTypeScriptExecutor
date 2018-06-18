@@ -9,9 +9,9 @@ import javax.swing.*;
  */
 public interface Icons {
 
-    Icon Run = AllIcons.General.Run;
+    Icon Run = AllIcons.Actions.Execute;
 
-    Icon Debug = AllIcons.General.Debug;
+    Icon Debug = AllIcons.Actions.StartDebugger;
 
     Icon Json = AllIcons.FileTypes.Json;
 
