@@ -1,6 +1,6 @@
 package icons;
 
-import com.intellij.openapi.util.IconLoader;
+import com.intellij.icons.AllIcons;
 
 import javax.swing.*;
 
@@ -9,10 +9,10 @@ import javax.swing.*;
  */
 public interface Icons {
 
-    Icon Run = IconLoader.getIcon("/actions/execute.png");
+    Icon Run = AllIcons.General.Run;
 
-    Icon Debug = IconLoader.getIcon("/actions/startDebugger.png");
+    Icon Debug = AllIcons.General.Debug;
 
-    Icon Json = IconLoader.getIcon("/fileTypes/json.png");
+    Icon Json = AllIcons.FileTypes.Json;
 
 }

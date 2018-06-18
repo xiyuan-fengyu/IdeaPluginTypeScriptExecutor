@@ -8,13 +8,18 @@ import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.executors.DefaultRunExecutor;
 import com.intellij.execution.impl.RunnerAndConfigurationSettingsImpl;
+import com.intellij.lang.javascript.service.JSLanguageServiceResultContainer;
+import com.intellij.lang.typescript.compiler.TypeScriptCompilerService;
 import com.intellij.lang.typescript.compiler.TypeScriptCompilerSettings;
 import com.intellij.lang.typescript.compiler.action.before.TypeScriptCompileBeforeRunTaskProvider;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfig;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigService;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigUtil;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
 import com.jetbrains.nodejs.run.NodeJsRunConfiguration;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationState;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
@@ -22,10 +27,11 @@ import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Future;
 
 /**
  * Created by xiyuan_fengyu on 2018/6/10 9:32.
@@ -44,6 +50,8 @@ public class NodeJsExecution {
 
     private static final TypeScriptCompileBeforeRunTaskProvider provider = new TypeScriptCompileBeforeRunTaskProvider();
 
+    private static final Logger logger = Logger.getInstance(NodeJsExecution.class.toString());
+
     static {
         Method temp = null;
         try {
@@ -57,12 +65,21 @@ public class NodeJsExecution {
 
     public static void resetTsCompilerSettings(Project project) {
         try {
-            Collection<TypeScriptConfig> configFiles = TypeScriptConfigService.Provider.getConfigFiles(project);
-            if (!configFiles.isEmpty()) {
+            Iterator<TypeScriptConfig> it = TypeScriptConfigService.Provider.getConfigFiles(project).iterator();
+            if (it.hasNext()) {
                 TypeScriptCompilerSettings settings = TypeScriptCompilerSettings.getSettings(project);
                 settings.setRecompileOnChanges(true);
                 settings.setUseConfig(true);
                 settings.setUseService(true);
+                Future<JSLanguageServiceResultContainer> future = TypeScriptCompilerService.getDefaultService(project).compileConfigProjectAndGetErrors(it.next());
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    try {
+                        future.get();
+                        VirtualFileManager.getInstance().syncRefresh();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
             }
         }
         catch (Exception e) {
@@ -94,42 +111,70 @@ public class NodeJsExecution {
     private static RunnerAndConfigurationSettingsImpl getConfiguration(Project project, VirtualFile virtualFile) {
         String tsPath = virtualFile.getCanonicalPath();
         RunnerAndConfigurationSettingsImpl configuration = configurations.get(tsPath);
+
         if (configuration == null) {
             if (tsPath == null) return null;
 
+            File complieJs = null;
+            TypeScriptConfig tsconfig = null;
+
+            String rootDir = null;
+            String outDir = null;
+
             try {
-                TypeScriptConfig tsconfig = TypeScriptConfigUtil.getConfigForFile(project, virtualFile);
+                tsconfig = TypeScriptConfigUtil.getConfigForFile(project, virtualFile);
                 if (tsconfig != null) {
                     String tscofigStr = new String(tsconfig.getConfigFile().contentsToByteArray(), StandardCharsets.UTF_8);
                     JsonObject tsconfigJson = jsonParser.parse(tscofigStr).getAsJsonObject();
                     JsonObject compilerOptions = tsconfigJson.getAsJsonObject("compilerOptions");
 
                     String tsconfigDir = tsconfig.getConfigDirectory().getCanonicalPath();
-                    String rootDir = compilerOptions.get("rootDir").getAsString();
-                    String outDir = compilerOptions.get("outDir").getAsString();
+
+                    rootDir = compilerOptions.get("rootDir").getAsString();
+                    outDir = compilerOptions.get("outDir").getAsString();
+
                     rootDir = getPath(tsconfigDir, rootDir);
                     outDir = getPath(tsconfigDir, outDir);
 
-                    if (tsPath.replaceAll("\\\\", "/")
+                    if ((rootDir.equals(outDir)) || tsPath.replaceAll("\\\\", "/")
                             .indexOf((rootDir + File.separator).replaceAll("\\\\", "/")) == 0) {
-                        String relatedTsPath = tsPath.substring(rootDir.length() + 1).replace(".ts", ".js");
-                        File complieJs = new File(outDir + File.separator + relatedTsPath);
-                        if (complieJs.exists()) {
-                            String complieJsName = complieJs.getName();
-                            RunManager runManager = RunManager.getInstance(project);
-                            configuration = (RunnerAndConfigurationSettingsImpl) runManager.createConfiguration(virtualFile.getName(),
-                                            NodeJsRunConfigurationType.getInstance().getFactory());
-                            RunConfiguration con = configuration.getConfiguration();
-                            NodeJsRunConfigurationState state = (NodeJsRunConfigurationState) getOptions.invoke(con);
-                            state.setWorkingDir(complieJs.getParent());
-                            state.setPathToJsFile(complieJsName);
-                            runManager.addConfiguration(configuration);
-                            configurations.put(tsPath, configuration);
+                        if (!rootDir.equals(outDir)) {
+                            String relatedTsPath = tsPath
+                                    .substring(rootDir.length() + 1)
+                                    .replaceAll("\\.ts$", ".js");
+
+                            complieJs = new File(outDir + File.separator + relatedTsPath);
+                        } else {
+                            complieJs = new File(tsPath.replaceAll("\\.ts$", ".js"));
                         }
                     }
                 }
             } catch (Exception e) {
                 e.printStackTrace();
+                //logger.error(e);
+
+                if (rootDir == null && outDir == null || rootDir == outDir)
+                {
+                    complieJs = new File(tsPath.replaceAll("\\.ts$", ".js"));
+                }
+            }
+
+            try {
+                if (complieJs != null && complieJs.exists()) {
+                    String complieJsName = complieJs.getName();
+                    RunManager runManager = RunManager.getInstance(project);
+                    configuration = (RunnerAndConfigurationSettingsImpl) runManager.createConfiguration(virtualFile.getName(),
+                            NodeJsRunConfigurationType.getInstance().getFactory());
+                    RunConfiguration con = configuration.getConfiguration();
+                    NodeJsRunConfigurationState state = (NodeJsRunConfigurationState) getOptions.invoke(con);
+                    state.setWorkingDir(complieJs.getParent());
+                    state.setPathToJsFile(complieJsName);
+                    runManager.addConfiguration(configuration);
+                    configurations.put(tsPath, configuration);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                //logger.error(e);
             }
         }
         return configuration;
