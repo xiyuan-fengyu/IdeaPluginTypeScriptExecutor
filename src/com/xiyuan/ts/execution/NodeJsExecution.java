@@ -195,8 +195,6 @@ public class NodeJsExecution {
                             String relatedTsPath = tsPath.substring(rootDir.length() + 1)
                                     .replaceAll("\\.ts$", ".js");
                             compiledJs = new File(outDir + "/" + relatedTsPath);
-                        } else {
-                            compiledJs = new File(tsPath.replaceAll("\\.ts$", ".js"));
                         }
                     }
                     this.rootDir = rootDir;
@@ -206,7 +204,7 @@ public class NodeJsExecution {
                 logger.error(e);
             }
 
-            if (rootDir == null && outDir == null)
+            if (compiledJs == null)
             {
                 compiledJs = new File(tsPath.replaceAll("\\.ts$", ".js"));
             }
