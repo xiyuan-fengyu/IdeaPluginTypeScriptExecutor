@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.xiyuan.TypeScriptExecutor</id>
     <name>TypeScriptExecutor</name>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <vendor email="xiyuan_fengyu@163.com" url="https://github.com/xiyuan-fengyu">xiyuan_fengyu</vendor>
 
     <depends>NodeJS</depends>
@@ -14,6 +14,9 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h1>2018-06-18 v1.0.4</h1>
+    <p>fix bug: cannot reexecute ts file after the run configuration is deleted.</p>
+
     <h1>2018-06-18 v1.0.3</h1>
     <p>fix bug: fial to auto compile after ts file change.</p>
     <p>make it supported when the tsconfig.json file or rootDir/outDir property is not existed.</p>

@@ -211,35 +211,35 @@ public class NodeJsExecution {
         }
 
         private void execute(boolean debug) {
-            if (runConf == null) {
-                try {
-                    String complieJsName = compiledJs.getName();
-                    RunManager runManager = RunManager.getInstance(project);
-                    RunnerAndConfigurationSettings settings = runManager.createConfiguration(runConfName,
-                            NodeJsRunConfigurationType.getInstance().getFactory());
-                    RunConfiguration configuration = settings.getConfiguration();
-                    NodeJsRunConfigurationState state = (NodeJsRunConfigurationState) getOptions.invoke(configuration);
-                    state.setWorkingDir(compiledJs.getParent());
-                    state.setPathToJsFile(complieJsName);
-                    runManager.addConfiguration(settings);
-                    this.runConf = settings;
-                } catch (IllegalAccessException | InvocationTargetException e) {
-                    logger.error(e);
+            RunManager runManager = RunManager.getInstance(project);
+            while (true) {
+                List<RunConfiguration> configurationsList = runManager.getConfigurationsList(NodeJsRunConfigurationType.getInstance());
+                if (runConf == null) {
+                    try {
+                        String complieJsName = compiledJs.getName();
+                        RunnerAndConfigurationSettings settings = runManager.createConfiguration(runConfName,
+                                NodeJsRunConfigurationType.getInstance().getFactory());
+                        RunConfiguration configuration = settings.getConfiguration();
+                        NodeJsRunConfigurationState state = (NodeJsRunConfigurationState) getOptions.invoke(configuration);
+                        state.setWorkingDir(compiledJs.getParent());
+                        state.setPathToJsFile(complieJsName);
+                        runManager.addConfiguration(settings);
+                        runConf = settings;
+                        break;
+                    } catch (IllegalAccessException | InvocationTargetException e) {
+                        logger.error(e);
+                    }
+                }
+                else if (!configurationsList.contains(runConf.getConfiguration())) {
+                    runConf = null;
                 }
             }
 
-            if (runConf != null) {
-                RunManager runManager = RunManager.getInstance(project);
-                List<RunConfiguration> configurationsList = runManager.getConfigurationsList(NodeJsRunConfigurationType.getInstance());
-                if (!configurationsList.contains(runConf.getConfiguration())) {
-                    runManager.addConfiguration(runConf);
-                }
-                if (runManager.getSelectedConfiguration() != runConf) {
-                    runManager.setSelectedConfiguration(runConf);
-                }
-                ProgramRunnerUtil.executeConfiguration(runConf,
-                        debug ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance());
+            if (runManager.getSelectedConfiguration() != runConf) {
+                runManager.setSelectedConfiguration(runConf);
             }
+            ProgramRunnerUtil.executeConfiguration(runConf,
+                    debug ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance());
         }
 
     }
