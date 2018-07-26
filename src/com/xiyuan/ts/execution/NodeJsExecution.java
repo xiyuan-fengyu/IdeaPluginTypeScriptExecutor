@@ -233,6 +233,7 @@ public class NodeJsExecution {
                 else if (!configurationsList.contains(runConf.getConfiguration())) {
                     runConf = null;
                 }
+                else break;
             }
 
             if (runManager.getSelectedConfiguration() != runConf) {
