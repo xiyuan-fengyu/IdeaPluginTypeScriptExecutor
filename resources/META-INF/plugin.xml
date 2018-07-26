@@ -14,7 +14,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    <h1>2018-06-18 v1.0.4</h1>
+    <h1>2018-07-26 v1.0.4</h1>
     <p>fix bug: cannot reexecute ts file after the run configuration is deleted.</p>
 
     <h1>2018-06-18 v1.0.3</h1>
