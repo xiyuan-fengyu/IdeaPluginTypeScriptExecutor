@@ -21,6 +21,7 @@ import com.intellij.openapi.actionSystem.DataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
+import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -28,14 +29,15 @@ import com.intellij.util.PathUtil;
 import com.jetbrains.nodejs.run.NodeJsRunConfiguration;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationState;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
+import com.xiyuan.ts.model.tuple.Tuple2;
+import com.xiyuan.ts.setting.autoCompile.AutoCompileConfig;
 import org.jetbrains.annotations.SystemIndependent;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 /**
@@ -65,24 +67,81 @@ public class NodeJsExecution {
     public static void resetTsCompilerSettings(Project project) {
         TypeScriptCompilerSettings settings = TypeScriptCompilerSettings.getSettings(project);
         if (settings.getDefaultServiceOptions() == null) settings.setDefaultServiceOptions("--sourceMap true");
-        settings.setRecompileOnChanges(true);
-        settings.setUseConfig(true);
+//        settings.setRecompileOnChanges(true);
+//        settings.setUseConfig(true);
         settings.setUseService(true);
 
-        TypeScriptCompilerService.getAll(project).forEach(service -> {
-            // Angular Langulage Service 启用后无法自动监视文件并自动编译，故禁用
-            if (service.getClass().getSimpleName().equals("Angular2LanguageService")) {
-                TypeScriptServerServiceSettings serviceSettings = service.getServiceSettings();
-                if (serviceSettings != null) serviceSettings.setUseService(false);
-            }
-        });
+//        TypeScriptCompilerService.getAll(project).forEach(service -> {
+//            // Angular Langulage Service 启用后无法自动监视文件并自动编译，故禁用
+////            if (service.getClass().getSimpleName().equals("Angular2LanguageService")) {
+////                TypeScriptServerServiceSettings serviceSettings = service.getServiceSettings();
+////                if (serviceSettings != null) serviceSettings.setUseService(false);
+////            }
+//        });
 
-        doCompile(project, TypeScriptConfigService.Provider.getConfigFiles(project), () -> {
+        // 启动时自动编译 启用了自动编译的配置文件对应的ts文件
+        List<TypeScriptConfig> autoCompileTypeScriptConfigs = TypeScriptConfigService.Provider.getConfigFiles(project).stream()
+                .filter(typeScriptConfig -> isAutoCompileEnable(project, typeScriptConfig)).collect(Collectors.toList());
+        doCompile(project, autoCompileTypeScriptConfigs).thenRun(() -> {
             // System.out.println("compile finish");
         });
     }
 
-    private static void doCompile(Project project, Collection<TypeScriptConfig> configFiles, Runnable callback) {
+    private static final Map<TypeScriptConfig, Integer> autoCompileTaskNums = new HashMap<>();
+
+    public static void autoCompileIfEnable(Project project, VirtualFile tsFile) {
+        TypeScriptConfig typeScriptConfig = TypeScriptConfigUtil.getConfigForFile(project, tsFile);
+        if (isAutoCompileEnable(project, typeScriptConfig)) {
+            synchronized (autoCompileTaskNums) {
+                Integer autoCompileTaskNum = autoCompileTaskNums.get(typeScriptConfig);
+                if (autoCompileTaskNum == null || autoCompileTaskNum == 0) {
+//                    System.out.println("compile task 1");
+                    autoCompileTaskNums.put(typeScriptConfig, 1);
+                    autoCompileLoop(project, typeScriptConfig);
+                }
+                else if (autoCompileTaskNum == 1) {
+//                    System.out.println("compile task 2");
+                    autoCompileTaskNums.put(typeScriptConfig, 2);
+                }
+//                else {
+//                    System.out.println("ignore compile task");
+//                }
+            }
+        }
+    }
+
+    private static void autoCompileLoop(Project project, TypeScriptConfig typeScriptConfig) {
+        doCompile(project, Collections.singletonList(typeScriptConfig)).thenAcceptAsync(res -> {
+            synchronized (autoCompileTaskNums) {
+                Integer autoCompileTaskNum = autoCompileTaskNums.get(typeScriptConfig);
+                if (autoCompileTaskNum >= 1) {
+                    autoCompileTaskNums.put(typeScriptConfig, autoCompileTaskNum - 1);
+                }
+                if (autoCompileTaskNum == 2) {
+//                    System.out.println("continue compile task");
+                    autoCompileLoop(project, typeScriptConfig);
+                }
+            }
+        });
+    }
+
+    private static boolean isAutoCompileEnable(Project project, TypeScriptConfig typeScriptConfig) {
+        if (typeScriptConfig == null) return false;
+
+        AutoCompileConfig autoCompileConfig = AutoCompileConfig.getInstance(project);
+        String projectDir = PathUtil.toSystemIndependentName(project.getBaseDir().getCanonicalPath()) + "/";
+        String configFilePath = PathUtil.toSystemIndependentName(typeScriptConfig.getConfigFile().getCanonicalPath());
+        if (configFilePath != null) {
+            if (configFilePath.indexOf(projectDir) == 0) {
+                configFilePath = configFilePath.substring(projectDir.length());
+            }
+        }
+        return autoCompileConfig.isAutoCompileEnable(configFilePath);
+    }
+
+    private static CompletableFuture<Boolean> doCompile(Project project, Collection<TypeScriptConfig> configFiles) {
+        CompletableFuture<Boolean> res = new CompletableFuture<>();
+
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             List<Future<JSLanguageServiceResultContainer>> futures = configFiles.stream().filter(Objects::nonNull)
                     .map(configFile -> TypeScriptCompilerService.getDefaultService(project).compileConfigProjectAndGetErrors(configFile))
@@ -92,11 +151,14 @@ public class NodeJsExecution {
                     if (future != null) future.get(60, TimeUnit.SECONDS);
                 }
                 VirtualFileManager.getInstance().asyncRefresh(null);
-                if (callback != null) callback.run();
+                res.complete(true);
             } catch (Exception e) {
                 logger.error(e);
+                res.complete(false);
             }
         });
+
+        return res;
     }
 
     public static void execute(AnActionEvent event, boolean debug) {
@@ -119,7 +181,7 @@ public class NodeJsExecution {
                     new TypeScriptServiceCommandClean(true));
         }
 
-        doCompile(typeScriptInfo.project, Collections.singletonList(typeScriptInfo.typeScriptConfig), () -> {
+        doCompile(typeScriptInfo.project, Collections.singletonList(typeScriptInfo.typeScriptConfig)).thenAccept(res -> {
             typeScriptInfo.execute(debug);
         });
     }
@@ -186,6 +248,9 @@ public class NodeJsExecution {
                     if (rootDir == null) {
                         @SystemIndependent String moduleFilePath = module.getModuleFilePath();
                         rootDir = PathUtil.toSystemIndependentName(PathUtil.getParentPath(moduleFilePath));
+                        if (tsPath.indexOf(rootDir + "/") != 0) {
+                            rootDir = tsconfigDir;
+                        }
                     }
 
                     String outDir = getPath(tsconfigDir, typeScriptConfig.getRawCompilerOption("outDir"));
