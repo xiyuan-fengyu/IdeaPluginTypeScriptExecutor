@@ -1,6 +1,5 @@
 package com.xiyuan.ts.execution;
 
-import com.google.gson.JsonParser;
 import com.intellij.execution.ProgramRunnerUtil;
 import com.intellij.execution.RunManager;
 import com.intellij.execution.RunnerAndConfigurationSettings;
@@ -8,50 +7,43 @@ import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.executors.DefaultRunExecutor;
 import com.intellij.lang.javascript.TypeScriptFileType;
-import com.intellij.lang.javascript.service.JSLanguageServiceResultContainer;
-import com.intellij.lang.typescript.compiler.TypeScriptCompilerService;
 import com.intellij.lang.typescript.compiler.TypeScriptCompilerSettings;
-import com.intellij.lang.typescript.compiler.languageService.protocol.commands.TypeScriptServiceCommandClean;
-import com.intellij.lang.typescript.compiler.ui.TypeScriptServerServiceSettings;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfig;
-import com.intellij.lang.typescript.tsconfig.TypeScriptConfigService;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigUtil;
-import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.openapi.actionSystem.DataKeys;
-import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
-import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.util.PathUtil;
 import com.jetbrains.nodejs.run.NodeJsRunConfiguration;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationState;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
-import com.xiyuan.ts.model.tuple.Tuple2;
-import com.xiyuan.ts.setting.autoCompile.AutoCompileConfig;
+import com.xiyuan.ts.action.TypeScriptCompileCurrentAction;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.SystemIndependent;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by xiyuan_fengyu on 2018/6/10 9:32.
  */
 public class NodeJsExecution {
 
-    private static final JsonParser jsonParser = new JsonParser();
-
     private static final Map<String, TypeScriptInfo> tsCaches = new HashMap<>();
 
     private static final Method getOptions;
 
     private static final Logger logger = Logger.getInstance(NodeJsExecution.class.toString());
+
+    private static final Map<VirtualFile, Project> changedTsFiles = new ConcurrentHashMap<>();
 
     static {
         Method temp = null;
@@ -66,99 +58,49 @@ public class NodeJsExecution {
 
     public static void resetTsCompilerSettings(Project project) {
         TypeScriptCompilerSettings settings = TypeScriptCompilerSettings.getSettings(project);
-        if (settings.getDefaultServiceOptions() == null) settings.setDefaultServiceOptions("--sourceMap true");
-//        settings.setRecompileOnChanges(true);
-//        settings.setUseConfig(true);
-        settings.setUseService(true);
-
-//        TypeScriptCompilerService.getAll(project).forEach(service -> {
-//            // Angular Langulage Service 启用后无法自动监视文件并自动编译，故禁用
-////            if (service.getClass().getSimpleName().equals("Angular2LanguageService")) {
-////                TypeScriptServerServiceSettings serviceSettings = service.getServiceSettings();
-////                if (serviceSettings != null) serviceSettings.setUseService(false);
-////            }
-//        });
-
-        // 启动时自动编译 启用了自动编译的配置文件对应的ts文件
-        List<TypeScriptConfig> autoCompileTypeScriptConfigs = TypeScriptConfigService.Provider.getConfigFiles(project).stream()
-                .filter(typeScriptConfig -> isAutoCompileEnable(project, typeScriptConfig)).collect(Collectors.toList());
-        doCompile(project, autoCompileTypeScriptConfigs).thenRun(() -> {
-            // System.out.println("compile finish");
-        });
-    }
-
-    private static final Map<TypeScriptConfig, Integer> autoCompileTaskNums = new HashMap<>();
-
-    public static void autoCompileIfEnable(Project project, VirtualFile tsFile) {
-        TypeScriptConfig typeScriptConfig = TypeScriptConfigUtil.getConfigForFile(project, tsFile);
-        if (isAutoCompileEnable(project, typeScriptConfig)) {
-            synchronized (autoCompileTaskNums) {
-                Integer autoCompileTaskNum = autoCompileTaskNums.get(typeScriptConfig);
-                if (autoCompileTaskNum == null || autoCompileTaskNum == 0) {
-//                    System.out.println("compile task 1");
-                    autoCompileTaskNums.put(typeScriptConfig, 1);
-                    autoCompileLoop(project, typeScriptConfig);
-                }
-                else if (autoCompileTaskNum == 1) {
-//                    System.out.println("compile task 2");
-                    autoCompileTaskNums.put(typeScriptConfig, 2);
-                }
-//                else {
-//                    System.out.println("ignore compile task");
-//                }
-            }
+        if (settings.getDefaultServiceOptions() == null) {
+            settings.setDefaultServiceOptions("--sourceMap true");
+            settings.setRecompileOnChanges(true);
+            settings.setUseConfig(true);
+            settings.setUseService(true);
         }
     }
 
-    private static void autoCompileLoop(Project project, TypeScriptConfig typeScriptConfig) {
-        doCompile(project, Collections.singletonList(typeScriptConfig)).thenAcceptAsync(res -> {
-            synchronized (autoCompileTaskNums) {
-                Integer autoCompileTaskNum = autoCompileTaskNums.get(typeScriptConfig);
-                if (autoCompileTaskNum >= 1) {
-                    autoCompileTaskNums.put(typeScriptConfig, autoCompileTaskNum - 1);
-                }
-                if (autoCompileTaskNum == 2) {
-//                    System.out.println("continue compile task");
-                    autoCompileLoop(project, typeScriptConfig);
-                }
-            }
-        });
+    public static void addChangedTsFiles(Project project, VirtualFile file) {
+        changedTsFiles.put(file, project);
     }
 
-    private static boolean isAutoCompileEnable(Project project, TypeScriptConfig typeScriptConfig) {
-        if (typeScriptConfig == null) return false;
-
-        AutoCompileConfig autoCompileConfig = AutoCompileConfig.getInstance(project);
-        String projectDir = PathUtil.toSystemIndependentName(project.getBaseDir().getCanonicalPath()) + "/";
-        String configFilePath = PathUtil.toSystemIndependentName(typeScriptConfig.getConfigFile().getCanonicalPath());
-        if (configFilePath != null) {
-            if (configFilePath.indexOf(projectDir) == 0) {
-                configFilePath = configFilePath.substring(projectDir.length());
+    private static boolean isTsChanged(TypeScriptConfig config) {
+        if (config != null) {
+            VirtualFile configFile = config.getConfigFile();
+            for (Map.Entry<VirtualFile, Project> entry : changedTsFiles.entrySet()) {
+                TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(entry.getValue(), entry.getKey());
+                if (configForFile != null) {
+                    VirtualFile configFile1 = configForFile.getConfigFile();
+                    if (configFile.equals(configFile1)) {
+                        return true;
+                    }
+                }
             }
         }
-        return autoCompileConfig.isAutoCompileEnable(configFilePath);
+        return false;
     }
 
-    private static CompletableFuture<Boolean> doCompile(Project project, Collection<TypeScriptConfig> configFiles) {
-        CompletableFuture<Boolean> res = new CompletableFuture<>();
-
-        ApplicationManager.getApplication().executeOnPooledThread(() -> {
-            List<Future<JSLanguageServiceResultContainer>> futures = configFiles.stream().filter(Objects::nonNull)
-                    .map(configFile -> TypeScriptCompilerService.getDefaultService(project).compileConfigProjectAndGetErrors(configFile))
-                    .collect(Collectors.toList());
-            try {
-                for (Future<JSLanguageServiceResultContainer> future : futures) {
-                    if (future != null) future.get(60, TimeUnit.SECONDS);
+    private static void removeTsChanged(TypeScriptConfig config) {
+        if (config != null) {
+            VirtualFile configFile = config.getConfigFile();
+            Iterator<Map.Entry<VirtualFile, Project>> it = changedTsFiles.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<VirtualFile, Project> entry = it.next();
+                TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(entry.getValue(), entry.getKey());
+                if (configForFile != null) {
+                    VirtualFile configFile1 = configForFile.getConfigFile();
+                    if (configFile.equals(configFile1)) {
+                        it.remove();
+                    }
                 }
-                VirtualFileManager.getInstance().asyncRefresh(null);
-                res.complete(true);
-            } catch (Exception e) {
-                logger.error(e);
-                res.complete(false);
             }
-        });
-
-        return res;
+        }
     }
 
     public static void execute(AnActionEvent event, boolean debug) {
@@ -169,21 +111,29 @@ public class NodeJsExecution {
         if (project == null || virtualFile == null || module == null) return;
 
         String tsPath = virtualFile.getCanonicalPath();
-        TypeScriptInfo tempTypeScriptInfo = tsCaches.get(tsPath);
-        if (tempTypeScriptInfo == null) {
-            tempTypeScriptInfo = new TypeScriptInfo(project, module, virtualFile);
-            tsCaches.put(tsPath, tempTypeScriptInfo);
-        }
-        TypeScriptInfo typeScriptInfo = tempTypeScriptInfo;
-
-        if (!typeScriptInfo.compiledJs.exists()) {
-            TypeScriptCompilerService.getDefaultService(project).sendCleanCommandToCompiler(
-                    new TypeScriptServiceCommandClean(true));
+        TypeScriptInfo typeScriptInfo = tsCaches.get(tsPath);
+        if (typeScriptInfo == null) {
+            typeScriptInfo = new TypeScriptInfo(project, module, virtualFile);
+            tsCaches.put(tsPath, typeScriptInfo);
         }
 
-        doCompile(typeScriptInfo.project, Collections.singletonList(typeScriptInfo.typeScriptConfig)).thenAccept(res -> {
+        final File compiledJs = typeScriptInfo.compiledJs;
+        if (!compiledJs.exists() || isTsChanged(typeScriptInfo.typeScriptConfig)) {
+            // 如果ts对应的编译后的js文件不存在，或者 typeScriptConfig 管理的ts文件有变动，则通过 typeScriptConfig 进行一次编译
+            AnActionEvent actionEvent = new AnActionEvent(null,
+                    new MyDataContext(event.getDataContext(), typeScriptInfo.typeScriptConfig.getConfigFile()),
+                    ActionPlaces.UNKNOWN, new Presentation(), ActionManager.getInstance(), 0);
+            TypeScriptInfo finalTypeScriptInfo = typeScriptInfo;
+            new TypeScriptCompileCurrentAction((project1, infos) -> {
+                if (infos.isEmpty()) {
+                    finalTypeScriptInfo.execute(debug);
+                }
+            }).actionPerformed(actionEvent);
+        }
+        else {
             typeScriptInfo.execute(debug);
-        });
+        }
+        removeTsChanged(typeScriptInfo.typeScriptConfig);
     }
 
     public static boolean executable(VirtualFile virtualFile) {
@@ -306,6 +256,28 @@ public class NodeJsExecution {
             }
             ProgramRunnerUtil.executeConfiguration(runConf,
                     debug ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance());
+        }
+
+    }
+
+    private static class MyDataContext implements DataContext {
+
+        private final DataContext parent;
+
+        private final VirtualFile virtualFile;
+
+        public MyDataContext(DataContext parent, VirtualFile virtualFile) {
+            this.parent = parent;
+            this.virtualFile = virtualFile;
+        }
+
+        @Nullable
+        @Override
+        public Object getData(String s) {
+            if (CommonDataKeys.VIRTUAL_FILE.getName().equals(s)) {
+                return virtualFile;
+            }
+            return parent.getData(s);
         }
 
     }

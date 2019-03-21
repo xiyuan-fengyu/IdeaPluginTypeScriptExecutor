@@ -1,15 +1,14 @@
 package com.xiyuan.ts;
 
-import com.intellij.lang.javascript.TypeScriptFileType;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.ApplicationComponent;
-import com.intellij.openapi.components.ProjectComponent;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent;
+import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent;
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.util.messages.MessageBusConnection;
 import com.xiyuan.ts.execution.NodeJsExecution;
@@ -44,10 +43,13 @@ public class App implements ApplicationComponent, BulkFileListener {
     public void after(@NotNull List<? extends VFileEvent> list) {
         for (VFileEvent event: list) {
             VirtualFile file = event.getFile();
-            if (file != null && TypeScriptFileType.INSTANCE == file.getFileType() && event instanceof VFileContentChangeEvent) {
+            if (file != null) {
                 Project project = getCurrentProject(file);
                 if (project != null) {
-                    NodeJsExecution.autoCompileIfEnable(project, file);
+                    String fileType = file.getFileType().getName();
+                    if ("TypeScript".equals(fileType) && event instanceof VFileContentChangeEvent || event instanceof VFileCreateEvent) {
+                        NodeJsExecution.addChangedTsFiles(project, file);
+                    }
                 }
             }
         }
