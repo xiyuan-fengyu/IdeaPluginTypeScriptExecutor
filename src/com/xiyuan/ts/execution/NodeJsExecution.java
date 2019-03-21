@@ -7,7 +7,9 @@ import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.executors.DefaultRunExecutor;
 import com.intellij.lang.javascript.TypeScriptFileType;
+import com.intellij.lang.typescript.compiler.TypeScriptCompilerService;
 import com.intellij.lang.typescript.compiler.TypeScriptCompilerSettings;
+import com.intellij.lang.typescript.compiler.ui.TypeScriptServerServiceSettings;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfig;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigUtil;
 import com.intellij.openapi.actionSystem.*;
@@ -60,10 +62,18 @@ public class NodeJsExecution {
         TypeScriptCompilerSettings settings = TypeScriptCompilerSettings.getSettings(project);
         if (settings.getDefaultServiceOptions() == null) {
             settings.setDefaultServiceOptions("--sourceMap true");
-            settings.setRecompileOnChanges(true);
-            settings.setUseConfig(true);
-            settings.setUseService(true);
         }
+        settings.setRecompileOnChanges(true);
+        settings.setUseConfig(true);
+        settings.setUseService(true);
+
+        TypeScriptCompilerService.getAll(project).forEach(service -> {
+            // Angular Langulage Service 启用后编译会卡主一段时间然后失败，故禁用
+            if (service.getClass().getSimpleName().equals("Angular2LanguageService")) {
+                TypeScriptServerServiceSettings serviceSettings = service.getServiceSettings();
+                if (serviceSettings != null) serviceSettings.setUseService(false);
+            }
+        });
     }
 
     public static void addChangedTsFiles(Project project, VirtualFile file) {
