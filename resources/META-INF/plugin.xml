@@ -11,7 +11,6 @@
     <p>1.install NodeJS plugin first</p>
     <p>2. New -> New tsconfig.json (ignore this step if existed)</p>
     <p>3. ContextMenu on typescript file to Run / Debug</p>
-    <p>You can disable auto compile to a tsconfig.json at "Settings > Build, Execution, Deployment > TypeScript Auto Compile"</p>
     ]]></description>
 
     <change-notes><![CDATA[
