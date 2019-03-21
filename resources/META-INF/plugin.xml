@@ -18,6 +18,7 @@
     <h1>2019-03-21 v1.0.6</h1>
     <p>remove support to disable auto compile to a tsconfig.json.</p>
     <p>auto compile before execute when some TypeScript files changed or the compiled js isn't found.</p>
+    <p>disable Angular2LanguageService, or compile will get stuck </p>
 
     <h1>2018-09-10 v1.0.5</h1>
     <p>add support to disable auto compile to a tsconfig.json.</p>
