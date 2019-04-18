@@ -126,6 +126,10 @@ public class NodeJsExecution {
             typeScriptInfo = new TypeScriptInfo(project, module, virtualFile);
             tsCaches.put(tsPath, typeScriptInfo);
         }
+        else {
+            // 检测 Already disposed: Project (Disposed) 的问题
+//            typeScriptInfo
+        }
 
         final File compiledJs = typeScriptInfo.compiledJs;
         if (!compiledJs.exists() || isTsChanged(typeScriptInfo.typeScriptConfig)) {
@@ -136,12 +140,12 @@ public class NodeJsExecution {
             TypeScriptInfo finalTypeScriptInfo = typeScriptInfo;
             new TypeScriptCompileCurrentAction((project1, infos) -> {
                 if (infos.isEmpty()) {
-                    finalTypeScriptInfo.execute(debug);
+                    finalTypeScriptInfo.execute(project, debug);
                 }
             }).actionPerformed(actionEvent);
         }
         else {
-            typeScriptInfo.execute(debug);
+            typeScriptInfo.execute(project, debug);
         }
         removeTsChanged(typeScriptInfo.typeScriptConfig);
     }
@@ -167,8 +171,6 @@ public class NodeJsExecution {
 
         private static final Map<String, Boolean> existedRunConfNames = new HashMap<>();
 
-        private Project project;
-
         private File compiledJs;
 
         private TypeScriptConfig typeScriptConfig;
@@ -184,8 +186,6 @@ public class NodeJsExecution {
         private RunnerAndConfigurationSettings runConf;
 
         private TypeScriptInfo(Project project, Module module, VirtualFile virtualFile) {
-            this.project = project;
-
             String tsPath = virtualFile.getCanonicalPath();
             if (tsPath == null) return;
 
@@ -235,7 +235,7 @@ public class NodeJsExecution {
             }
         }
 
-        private void execute(boolean debug) {
+        private void execute(Project project, boolean debug) {
             RunManager runManager = RunManager.getInstance(project);
             while (true) {
                 List<RunConfiguration> configurationsList = runManager.getConfigurationsList(NodeJsRunConfigurationType.getInstance());
