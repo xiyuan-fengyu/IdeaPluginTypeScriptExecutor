@@ -113,8 +113,8 @@ public class NodeJsExecution {
 
     public static void execute(AnActionEvent event, boolean debug) {
         Project project = event.getProject();
-        VirtualFile virtualFile = event.getData(DataKeys.VIRTUAL_FILE);
-        Module module = event.getData(DataKeys.MODULE);
+        VirtualFile virtualFile = event.getData(LangDataKeys.VIRTUAL_FILE);
+        Module module = event.getData(LangDataKeys.MODULE);
 
         if (project == null || virtualFile == null || module == null) return;
 
@@ -134,12 +134,12 @@ public class NodeJsExecution {
             TypeScriptInfo finalTypeScriptInfo = typeScriptInfo;
             new TypeScriptCompileCurrentAction((project1, infos) -> {
                 if (infos.isEmpty()) {
-                    finalTypeScriptInfo.execute(debug);
+                    finalTypeScriptInfo.execute(project, debug);
                 }
             }).actionPerformed(actionEvent);
         }
         else {
-            typeScriptInfo.execute(debug);
+            typeScriptInfo.execute(project, debug);
         }
         removeTsChanged(typeScriptInfo.typeScriptConfig);
     }
@@ -165,8 +165,6 @@ public class NodeJsExecution {
 
         private static final Map<String, Boolean> existedRunConfNames = new HashMap<>();
 
-        private Project project;
-
         private File compiledJs;
 
         private TypeScriptConfig typeScriptConfig;
@@ -182,8 +180,6 @@ public class NodeJsExecution {
         private RunnerAndConfigurationSettings runConf;
 
         private TypeScriptInfo(Project project, Module module, VirtualFile virtualFile) {
-            this.project = project;
-
             String tsPath = virtualFile.getCanonicalPath();
             if (tsPath == null) return;
 
@@ -233,7 +229,7 @@ public class NodeJsExecution {
             }
         }
 
-        private void execute(boolean debug) {
+        private void execute(Project project, boolean debug) {
             RunManager runManager = RunManager.getInstance(project);
             while (true) {
                 List<RunConfiguration> configurationsList = runManager.getConfigurationsList(NodeJsRunConfigurationType.getInstance());
