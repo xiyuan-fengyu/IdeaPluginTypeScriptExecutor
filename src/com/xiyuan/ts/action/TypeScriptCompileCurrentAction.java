@@ -12,15 +12,15 @@ import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
+import java.util.LinkedHashSet;
 
 /**
  * Created by xiyuan_fengyu on 2019/3/21 15:31.
  */
-public class TypeScriptCompileCurrentAction extends com.intellij.lang.typescript.compiler.action.TypeScriptCompileCurrentAction {
+public class TypeScriptCompileCurrentAction extends com.intellij.lang.typescript.compiler.action.TypeScriptCompileConfigAction {
 
     private CompileListener compileListener;
 
@@ -35,17 +35,16 @@ public class TypeScriptCompileCurrentAction extends com.intellij.lang.typescript
             VirtualFile configFile = this.getConfigFile(context);
             if (configFile != null) {
                 return (indicator) -> {
-                    TypeScriptConfig config = (TypeScriptConfig) DumbService.getInstance(project).runReadActionInSmartMode(() -> {
-                        return TypeScriptConfigService.Provider.parseConfigFile(project, configFile);
-                    });
+                    TypeScriptConfig config = DumbService.getInstance(project).runReadActionInSmartMode(() ->
+                            TypeScriptConfigService.Provider.parseConfigFile(project, configFile));
                     if (config != null) {
                         TypeScriptCompilerService compilerService = this.getServiceForConfig(project, configFile);
                         if (compilerService != null) {
-                            Collection<JSAnnotationError> infos = ContainerUtil.newLinkedHashSet();
+                            Collection<JSAnnotationError> infos = new LinkedHashSet<>();
                             this.runBeforeStartingCompile(project, indicator, compilerService);
                             TypeScriptServiceCommandClean command = new TypeScriptServiceCommandClean(TypeScriptCompilerConfigUtil.getConfigIdByConfig(config));
                             compilerService.sendCleanCommandToCompiler(command);
-                            this.compileConfig(indicator, compilerService, config, infos);
+                            this.compileConfig(indicator, compilerService, configFile, infos);
                             this.logErrors(project, infos);
                             this.compileListener.onCompileResult(project, infos);
                         }

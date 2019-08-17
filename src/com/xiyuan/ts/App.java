@@ -1,7 +1,7 @@
 package com.xiyuan.ts;
 
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.components.ApplicationComponent;
+import com.intellij.openapi.components.BaseComponent;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -19,7 +19,7 @@ import java.util.List;
 /**
  * Created by xiyuan_fengyu on 2018/9/10 17:38.
  */
-public class App implements ApplicationComponent, BulkFileListener {
+public class App implements BaseComponent, BulkFileListener {
 
     private MessageBusConnection connection = ApplicationManager.getApplication().getMessageBus().connect();
 

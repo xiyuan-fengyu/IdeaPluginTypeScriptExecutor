@@ -19,14 +19,12 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.PathUtil;
 import com.jetbrains.nodejs.run.NodeJsRunConfiguration;
-import com.jetbrains.nodejs.run.NodeJsRunConfigurationState;
 import com.jetbrains.nodejs.run.NodeJsRunConfigurationType;
 import com.xiyuan.ts.action.TypeScriptCompileCurrentAction;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.SystemIndependent;
 
 import java.io.File;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -66,8 +64,8 @@ public class NodeJsExecution {
         settings.setRecompileOnChanges(true);
         settings.setUseConfig(true);
         settings.setUseService(true);
-
         TypeScriptCompilerService.getAll(project).forEach(service -> {
+
             // Angular Langulage Service 启用后编译会卡主一段时间然后失败，故禁用
             if (service.getClass().getSimpleName().equals("Angular2LanguageService")) {
                 TypeScriptServerServiceSettings serviceSettings = service.getServiceSettings();
@@ -243,15 +241,19 @@ public class NodeJsExecution {
                     try {
                         String complieJsName = compiledJs.getName();
                         RunnerAndConfigurationSettings settings = runManager.createConfiguration(runConfName,
-                                NodeJsRunConfigurationType.getInstance().getFactory());
+                                NodeJsRunConfigurationType.class);
                         RunConfiguration configuration = settings.getConfiguration();
-                        NodeJsRunConfigurationState state = (NodeJsRunConfigurationState) getOptions.invoke(configuration);
-                        state.setWorkingDir(compiledJs.getParent());
-                        state.setPathToJsFile(complieJsName);
+                        Object state = getOptions.invoke(configuration);
+                        Method setWorkingDir = state.getClass().getDeclaredMethod("setWorkingDir", String.class);
+                        setWorkingDir.setAccessible(true);
+                        setWorkingDir.invoke(state, compiledJs.getParent());
+                        Method setPathToJsFile = state.getClass().getDeclaredMethod("setPathToJsFile", String.class);
+                        setPathToJsFile.setAccessible(true);
+                        setPathToJsFile.invoke(state, complieJsName);
                         runManager.addConfiguration(settings);
                         runConf = settings;
                         break;
-                    } catch (IllegalAccessException | InvocationTargetException e) {
+                    } catch (Exception e) {
                         logger.error(e);
                     }
                 }
