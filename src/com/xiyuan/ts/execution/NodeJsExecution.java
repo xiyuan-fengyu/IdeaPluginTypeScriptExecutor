@@ -81,14 +81,20 @@ public class NodeJsExecution {
     private static boolean isTsChanged(TypeScriptConfig config) {
         if (config != null) {
             VirtualFile configFile = config.getConfigFile();
-            for (Map.Entry<VirtualFile, Project> entry : changedTsFiles.entrySet()) {
-                TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(entry.getValue(), entry.getKey());
-                if (configForFile != null) {
-                    VirtualFile configFile1 = configForFile.getConfigFile();
-                    if (configFile.equals(configFile1)) {
-                        return true;
+            try {
+                for (Map.Entry<VirtualFile, Project> entry : changedTsFiles.entrySet()) {
+                    TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(entry.getValue(), entry.getKey());
+                    if (configForFile != null) {
+                        VirtualFile configFile1 = configForFile.getConfigFile();
+                        if (configFile.equals(configFile1)) {
+                            return true;
+                        }
                     }
                 }
+            }
+            catch (Exception e) {
+                changedTsFiles.clear();
+                return true;
             }
         }
         return false;
