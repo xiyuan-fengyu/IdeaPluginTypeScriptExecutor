@@ -12,10 +12,16 @@ import com.intellij.lang.typescript.compiler.TypeScriptCompilerSettings;
 import com.intellij.lang.typescript.compiler.ui.TypeScriptServerServiceSettings;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfig;
 import com.intellij.lang.typescript.tsconfig.TypeScriptConfigUtil;
+import com.intellij.notification.EventLog;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationType;
+import com.intellij.notification.Notifications;
+import com.intellij.notification.impl.ui.NotificationsUtil;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.PathUtil;
 import com.jetbrains.nodejs.run.NodeJsRunConfiguration;
@@ -103,17 +109,30 @@ public class NodeJsExecution {
     private static void removeTsChanged(TypeScriptConfig config) {
         if (config != null) {
             VirtualFile configFile = config.getConfigFile();
-            Iterator<Map.Entry<VirtualFile, Project>> it = changedTsFiles.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<VirtualFile, Project> entry = it.next();
-                TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(entry.getValue(), entry.getKey());
-                if (configForFile != null) {
-                    VirtualFile configFile1 = configForFile.getConfigFile();
-                    if (configFile.equals(configFile1)) {
-                        it.remove();
+            try {
+                Iterator<Map.Entry<VirtualFile, Project>> it = changedTsFiles.entrySet().iterator();
+                while (it.hasNext()) {
+                    Map.Entry<VirtualFile, Project> entry = it.next();
+                    TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(entry.getValue(), entry.getKey());
+                    if (configForFile != null) {
+                        VirtualFile configFile1 = configForFile.getConfigFile();
+                        if (configFile.equals(configFile1)) {
+                            it.remove();
+                        }
                     }
                 }
             }
+            catch (Exception e) {
+                changedTsFiles.clear();
+            }
+        }
+    }
+
+    private static void showInfoMessage(String msg) {
+        Notification notification = new Notification("TypeScriptExecutor", "TypeScriptExecutor", msg, NotificationType.INFORMATION);
+        Notifications.Bus.notify(notification);
+        if (notification.getBalloon() != null) {
+            notification.getBalloon().hide();
         }
     }
 
@@ -125,14 +144,20 @@ public class NodeJsExecution {
         if (project == null || virtualFile == null || module == null) return;
 
         String tsPath = virtualFile.getCanonicalPath();
+        showInfoMessage("prepare to execute " + tsPath);
+
         TypeScriptInfo typeScriptInfo = tsCaches.get(tsPath);
         if (typeScriptInfo == null) {
+            showInfoMessage("init typescript file info ...");
             typeScriptInfo = new TypeScriptInfo(project, module, virtualFile);
             tsCaches.put(tsPath, typeScriptInfo);
+            showInfoMessage("init typescript file info successfully");
         }
 
+        showInfoMessage("check whether js existed or typescript changed");
         final File compiledJs = typeScriptInfo.compiledJs;
         if (!compiledJs.exists() || isTsChanged(typeScriptInfo.typeScriptConfig)) {
+            showInfoMessage("start to compile typescript");
             // 如果ts对应的编译后的js文件不存在，或者 typeScriptConfig 管理的ts文件有变动，则通过 typeScriptConfig 进行一次编译
             AnActionEvent actionEvent = new AnActionEvent(null,
                     new MyDataContext(event.getDataContext(), typeScriptInfo.typeScriptConfig.getConfigFile()),
@@ -140,7 +165,11 @@ public class NodeJsExecution {
             TypeScriptInfo finalTypeScriptInfo = typeScriptInfo;
             new TypeScriptCompileCurrentAction((project1, infos) -> {
                 if (infos.isEmpty()) {
+                    showInfoMessage("compiled typescript successfully");
                     finalTypeScriptInfo.execute(project, debug);
+                }
+                else {
+                    showInfoMessage("compiled typescript with " + infos.size() + (infos.size() > 1 ? " errors" : "error"));
                 }
             }).actionPerformed(actionEvent);
         }
@@ -241,6 +270,8 @@ public class NodeJsExecution {
                 List<RunConfiguration> configurationsList = runManager.getConfigurationsList(NodeJsRunConfigurationType.getInstance());
                 if (runConf == null) {
                     try {
+                        showInfoMessage("init runner and configuration settings");
+
                         String complieJsName = compiledJs.getName();
                         RunnerAndConfigurationSettings settings = runManager.createConfiguration(runConfName,
                                 NodeJsRunConfigurationType.class);
@@ -254,6 +285,8 @@ public class NodeJsExecution {
                         setPathToJsFile.invoke(state, complieJsName);
                         runManager.addConfiguration(settings);
                         runConf = settings;
+
+                        showInfoMessage("add settings to RunManager");
                         break;
                     } catch (Exception e) {
                         logger.error(e);
@@ -266,8 +299,11 @@ public class NodeJsExecution {
             }
 
             if (runManager.getSelectedConfiguration() != runConf) {
+                showInfoMessage("select settings");
                 runManager.setSelectedConfiguration(runConf);
             }
+
+            showInfoMessage("start to execute");
             ProgramRunnerUtil.executeConfiguration(runConf,
                     debug ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance());
         }
