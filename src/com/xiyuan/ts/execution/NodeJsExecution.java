@@ -30,10 +30,7 @@ import org.jetbrains.annotations.SystemIndependent;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -83,17 +80,13 @@ public class NodeJsExecution {
     }
 
     private static boolean isTsChanged(Project project, TypeScriptConfig config) {
-        VirtualFile configFile = config.getConfigFile();
         for (Map.Entry<VirtualFile, Boolean>  entry: changedTsFiles.entrySet()) {
             VirtualFile virtualFile = entry.getKey();
             String relativePath = ProjectUtil.calcRelativeToProjectPath(virtualFile, project);
             if (relativePath.startsWith("...")) {
                 TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(project, virtualFile);
-                if (configForFile != null) {
-                    VirtualFile configFile1 = configForFile.getConfigFile();
-                    if (configFile.equals(configFile1)) {
-                        return true;
-                    }
+                if (Objects.equals(config, configForFile)) {
+                    return true;
                 }
             }
         }
@@ -101,21 +94,15 @@ public class NodeJsExecution {
     }
 
     private static void removeTsChanged(Project project, TypeScriptConfig config) {
-        if (config != null) {
-            VirtualFile configFile = config.getConfigFile();
-            Iterator<Map.Entry<VirtualFile, Boolean>> it = changedTsFiles.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<VirtualFile, Boolean> entry = it.next();
-                VirtualFile virtualFile = entry.getKey();
-                String relativePath = ProjectUtil.calcRelativeToProjectPath(virtualFile, project);
-                if (relativePath.startsWith("...")) {
-                    TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(project, entry.getKey());
-                    if (configForFile != null) {
-                        VirtualFile configFile1 = configForFile.getConfigFile();
-                        if (configFile.equals(configFile1)) {
-                            it.remove();
-                        }
-                    }
+        Iterator<Map.Entry<VirtualFile, Boolean>> it = changedTsFiles.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<VirtualFile, Boolean> entry = it.next();
+            VirtualFile virtualFile = entry.getKey();
+            String relativePath = ProjectUtil.calcRelativeToProjectPath(virtualFile, project);
+            if (relativePath.startsWith("...")) {
+                TypeScriptConfig configForFile = TypeScriptConfigUtil.getConfigForFile(project, entry.getKey());
+                if (Objects.equals(config, configForFile)) {
+                    it.remove();
                 }
             }
         }
@@ -142,10 +129,11 @@ public class NodeJsExecution {
         TypeScriptInfo typeScriptInfo = tsCaches.get(tsPath);
         if (typeScriptInfo == null) {
             printInfoMessage("init typescript file info ...");
-            typeScriptInfo = new TypeScriptInfo(project, module, virtualFile);
+            typeScriptInfo = new TypeScriptInfo(project, virtualFile);
             tsCaches.put(tsPath, typeScriptInfo);
             printInfoMessage("init typescript file info successfully");
         }
+        typeScriptInfo.checkTypeScriptConfig(project, module, virtualFile);
 
         printInfoMessage("check whether js existed or typescript changed");
         final File compiledJs = typeScriptInfo.compiledJs;
@@ -153,7 +141,7 @@ public class NodeJsExecution {
             printInfoMessage("start to compile typescript");
             // 如果ts对应的编译后的js文件不存在，或者 typeScriptConfig 管理的ts文件有变动，则通过 typeScriptConfig 进行一次编译
             AnActionEvent actionEvent = new AnActionEvent(null,
-                    new MyDataContext(event.getDataContext(), typeScriptInfo.typeScriptConfig.getConfigFile()),
+                    new MyDataContext(event.getDataContext(), typeScriptInfo.typeScriptConfig == null ? null : typeScriptInfo.typeScriptConfig.getConfigFile()),
                     ActionPlaces.UNKNOWN, new Presentation(), ActionManager.getInstance(), 0);
             TypeScriptInfo finalTypeScriptInfo = typeScriptInfo;
             new TypeScriptCompileCurrentAction((project1, infos) -> {
@@ -207,7 +195,7 @@ public class NodeJsExecution {
 
         private RunnerAndConfigurationSettings runConf;
 
-        private TypeScriptInfo(Project project, Module module, VirtualFile virtualFile) {
+        private TypeScriptInfo(Project project, VirtualFile virtualFile) {
             String tsPath = virtualFile.getCanonicalPath();
             if (tsPath == null) return;
 
@@ -220,8 +208,11 @@ public class NodeJsExecution {
             }
             this.runConfName = tsName;
             existedRunConfNames.put(tsName, true);
+        }
 
+        private void checkTypeScriptConfig(Project project, Module module, VirtualFile virtualFile) {
             try {
+                String tsPath = virtualFile.getCanonicalPath();
                 typeScriptConfig = TypeScriptConfigUtil.getConfigForFile(project, virtualFile);
                 if (typeScriptConfig != null) {
                     tsconfigDir = typeScriptConfig.getConfigDirectory().getCanonicalPath();
@@ -247,13 +238,15 @@ public class NodeJsExecution {
                     this.rootDir = rootDir;
                     this.outDir = outDir;
                 }
+                else {
+                    tsconfigDir = null;
+                    @SystemIndependent String moduleFilePath = module.getModuleFilePath();
+                    rootDir = PathUtil.toSystemIndependentName(PathUtil.getParentPath(moduleFilePath));
+                    outDir = rootDir;
+                    compiledJs = new File(tsPath.replaceAll("\\.ts$", ".js"));
+                }
             } catch (Exception e) {
                 logger.error(e);
-            }
-
-            if (compiledJs == null)
-            {
-                compiledJs = new File(tsPath.replaceAll("\\.ts$", ".js"));
             }
         }
 
@@ -286,7 +279,7 @@ public class NodeJsExecution {
                         logger.error(e);
                     }
                 }
-                else if (!configurationsList.contains(runConf.getConfiguration())) {
+                else if (!runConfExisted(configurationsList, runConf.getConfiguration())) {
                     runConf = null;
                 }
                 else break;
@@ -300,6 +293,24 @@ public class NodeJsExecution {
             printInfoMessage("start to execute");
             ProgramRunnerUtil.executeConfiguration(runConf,
                     debug ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance());
+        }
+
+        private boolean runConfExisted( List<RunConfiguration> configurationsList, RunConfiguration runConfiguration) {
+            try {
+                Method getWorkingDirectory = runConfiguration.getClass().getDeclaredMethod("getWorkingDirectory");
+                getWorkingDirectory.setAccessible(true);
+                Method getExePath = runConfiguration.getClass().getDeclaredMethod("getExePath");
+                getExePath.setAccessible(true);
+                for (RunConfiguration configuration : configurationsList) {
+                    if (configuration == runConfiguration &&
+                            Objects.equals(getWorkingDirectory.invoke(configuration), compiledJs.getParent())) {
+                        return true;
+                    }
+                }
+            }
+            catch (Exception e) {
+            }
+            return false;
         }
 
     }

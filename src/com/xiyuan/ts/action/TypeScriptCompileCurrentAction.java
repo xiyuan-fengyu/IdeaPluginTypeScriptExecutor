@@ -53,7 +53,22 @@ public class TypeScriptCompileCurrentAction extends com.intellij.lang.typescript
             } else {
                 VirtualFile[] files = this.getFiles(project, context);
                 return (indicator) -> {
-                    this.runCompile(project, indicator, files);
+                    TypeScriptCompilerService compilerService = TypeScriptCompilerService.getDefaultService(project);
+                    this.runBeforeStartingCompile(project, indicator, compilerService);
+                    TypeScriptServiceCommandClean command = new TypeScriptServiceCommandClean(false);
+                    compilerService.sendCleanCommandToCompiler(command);
+
+                    Collection<JSAnnotationError> infos = new LinkedHashSet<>();
+                    Collection<String> processed = new LinkedHashSet<>();
+                    if (files != null) {
+                        for (VirtualFile file : files) {
+                            TypeScriptCompilerService tempCompilerService = TypeScriptCompilerService.getServiceForFile(project, file);
+                            this.compileFile(file, indicator, tempCompilerService, infos, processed);
+                        }
+                    }
+                    indicator.checkCanceled();
+                    this.logErrors(project, infos);
+                    this.compileListener.onCompileResult(project, infos);
                 };
             }
         }
