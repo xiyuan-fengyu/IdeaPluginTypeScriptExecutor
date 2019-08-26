@@ -2,8 +2,6 @@ package com.xiyuan.ts;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.BaseComponent;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.BulkFileListener;
@@ -44,31 +42,12 @@ public class App implements BaseComponent, BulkFileListener {
         for (VFileEvent event: list) {
             VirtualFile file = event.getFile();
             if (file != null) {
-                Project project = getCurrentProject(file);
-                if (project != null) {
-                    String fileType = file.getFileType().getName();
-                    if ("TypeScript".equals(fileType) && event instanceof VFileContentChangeEvent || event instanceof VFileCreateEvent) {
-                        NodeJsExecution.addChangedTsFiles(project, file);
-                    }
+                String fileType = file.getFileType().getName();
+                if ("TypeScript".equals(fileType) && event instanceof VFileContentChangeEvent || event instanceof VFileCreateEvent) {
+                    NodeJsExecution.addChangedTsFiles(file);
                 }
             }
         }
-    }
-
-    private static Project getCurrentProject(VirtualFile file) {
-        if (file == null) {
-            return null;
-        }
-
-        String filePath = file.getPath();
-        for (Project project: ProjectManager.getInstance().getOpenProjects()) {
-            String projectPath = project.getBasePath();
-            if (projectPath != null && filePath.indexOf(projectPath) == 0) {
-                return project;
-            }
-        }
-
-        return null;
     }
 
 }
