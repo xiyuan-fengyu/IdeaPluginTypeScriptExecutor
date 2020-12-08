@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.xiyuan.TypeScriptExecutor</id>
     <name>TypeScriptExecutor</name>
-    <version>1.0.8.1 for idea2019.2</version>
+    <version>1.0.9.1 for idea2020.2.3</version>
     <vendor email="xiyuan_fengyu@163.com" url="https://github.com/xiyuan-fengyu">xiyuan_fengyu</vendor>
 
     <depends>NodeJS</depends>
@@ -14,6 +14,9 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h1>2020-12-08 v1.0.9.1</h1>
+    <p>adaptation for idea2020.2.3</p>
+
     <h1>2019-08-26 v1.0.8.1</h1>
     <p>fix bug: Already disposed: Project (Disposed).</p>
 

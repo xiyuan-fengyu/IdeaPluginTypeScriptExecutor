@@ -20,7 +20,7 @@ import java.util.LinkedHashSet;
 /**
  * Created by xiyuan_fengyu on 2019/3/21 15:31.
  */
-public class TypeScriptCompileCurrentAction extends com.intellij.lang.typescript.compiler.action.TypeScriptCompileConfigAction {
+public class TypeScriptCompileCurrentAction extends com.intellij.lang.typescript.compiler.action.TypeScriptCompileWithConfigAction {
 
     private CompileListener compileListener;
 
