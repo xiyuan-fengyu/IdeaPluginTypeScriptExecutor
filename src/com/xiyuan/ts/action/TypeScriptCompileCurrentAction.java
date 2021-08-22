@@ -41,7 +41,7 @@ public class TypeScriptCompileCurrentAction extends com.intellij.lang.typescript
                         TypeScriptCompilerService compilerService = this.getServiceForConfig(project, configFile);
                         if (compilerService != null) {
                             Collection<JSAnnotationError> infos = new LinkedHashSet<>();
-                            this.runBeforeStartingCompile(project, indicator, compilerService);
+                            this.runBeforeStartingCompile(indicator, compilerService);
                             TypeScriptServiceCommandClean command = new TypeScriptServiceCommandClean(TypeScriptCompilerConfigUtil.getConfigIdByConfig(config));
                             compilerService.sendCleanCommandToCompiler(command);
                             this.compileConfig(indicator, compilerService, configFile, infos);
@@ -54,7 +54,7 @@ public class TypeScriptCompileCurrentAction extends com.intellij.lang.typescript
                 VirtualFile[] files = this.getFiles(project, context);
                 return (indicator) -> {
                     TypeScriptCompilerService compilerService = TypeScriptCompilerService.getDefaultService(project);
-                    this.runBeforeStartingCompile(project, indicator, compilerService);
+                    this.runBeforeStartingCompile(indicator, compilerService);
                     TypeScriptServiceCommandClean command = new TypeScriptServiceCommandClean(false);
                     compilerService.sendCleanCommandToCompiler(command);
 
