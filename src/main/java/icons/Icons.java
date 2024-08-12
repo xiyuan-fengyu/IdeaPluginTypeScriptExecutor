@@ -13,6 +13,4 @@ public interface Icons {
 
     Icon Debug = AllIcons.Actions.StartDebugger;
 
-    Icon Json = AllIcons.FileTypes.Json;
-
 }
